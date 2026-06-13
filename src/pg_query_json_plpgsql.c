@@ -506,7 +506,11 @@ dump_return(StringInfo out, PLpgSQL_stmt_return *node)
 
 	WRITE_INT_FIELD(lineno, lineno, lineno);
 	WRITE_EXPR_FIELD(expr);
-	WRITE_INT_FIELD(retvarno, retvarno, retvarno);
+	/* retvarno is a datum index (>= 0) when RETURN names a simple variable,
+	 * and -1 when an expression is used; WRITE_INT_FIELD would drop a valid
+	 * index of 0, so emit it directly whenever it is non-negative. */
+	if (node->retvarno >= 0)
+		appendStringInfo(out, "\"retvarno\":%d,", node->retvarno);
 }
 
 static void
@@ -516,7 +520,11 @@ dump_return_next(StringInfo out, PLpgSQL_stmt_return_next *node)
 
 	WRITE_INT_FIELD(lineno, lineno, lineno);
 	WRITE_EXPR_FIELD(expr);
-	WRITE_INT_FIELD(retvarno, retvarno, retvarno);
+	/* retvarno is a datum index (>= 0) when RETURN names a simple variable,
+	 * and -1 when an expression is used; WRITE_INT_FIELD would drop a valid
+	 * index of 0, so emit it directly whenever it is non-negative. */
+	if (node->retvarno >= 0)
+		appendStringInfo(out, "\"retvarno\":%d,", node->retvarno);
 }
 
 static void
