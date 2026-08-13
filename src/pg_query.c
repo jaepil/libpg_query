@@ -17,6 +17,8 @@ __thread sig_atomic_t pg_query_initialized = 0;
 
 #ifdef HAVE_PTHREAD
 static pthread_key_t pg_query_thread_exit_key;
+static pthread_once_t pg_query_thread_exit_key_once = PTHREAD_ONCE_INIT;
+static void pg_query_create_thread_exit_key(void);
 static void pg_query_thread_exit(void *key);
 #endif
 
@@ -29,7 +31,7 @@ void pg_query_init(void)
 	SetDatabaseEncoding(PG_UTF8);
 
 #ifdef HAVE_PTHREAD
-	pthread_key_create(&pg_query_thread_exit_key, pg_query_thread_exit);
+	pthread_once(&pg_query_thread_exit_key_once, pg_query_create_thread_exit_key);
 	pthread_setspecific(pg_query_thread_exit_key, TopMemoryContext);
 #endif
 }
@@ -63,6 +65,11 @@ void pg_query_free_top_memory_context(MemoryContext context)
 }
 
 #ifdef HAVE_PTHREAD
+static void pg_query_create_thread_exit_key(void)
+{
+	pthread_key_create(&pg_query_thread_exit_key, pg_query_thread_exit);
+}
+
 static void pg_query_thread_exit(void *key)
 {
 	MemoryContext context = (MemoryContext) key;
@@ -72,7 +79,11 @@ static void pg_query_thread_exit(void *key)
 
 void pg_query_exit(void)
 {
+#ifdef HAVE_PTHREAD
+	pthread_setspecific(pg_query_thread_exit_key, NULL);
+#endif
 	pg_query_free_top_memory_context(TopMemoryContext);
+	pg_query_initialized = 0;
 }
 
 MemoryContext pg_query_enter_memory_context()
