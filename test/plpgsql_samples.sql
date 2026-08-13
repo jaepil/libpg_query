@@ -641,3 +641,11 @@ BEGIN
     RETURN v;
 END;
 $$;
+
+-- Regression: TYPEOID mock data must identify built-in array element types so
+-- PostgreSQL's VARIADIC argument validation accepts a real array type.
+CREATE FUNCTION variadic_array(VARIADIC items integer[]) RETURNS integer LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN cardinality(items);
+END;
+$$;
