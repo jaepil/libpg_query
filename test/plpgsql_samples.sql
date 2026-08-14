@@ -16,6 +16,15 @@ END
 $BODY$
 LANGUAGE plpgsql;
 
+CREATE FUNCTION quoted_dotted_percent_type() RETURNS void AS $$
+DECLARE
+    value_from_column "app.dot"."typed.dot"."id.dot"%TYPE;
+    row_from_table "app.dot"."typed.dot"%ROWTYPE;
+BEGIN
+    RETURN;
+END
+$$ LANGUAGE plpgsql;
+
 CREATE FUNCTION get_available_flightid(date) RETURNS SETOF integer AS
 $BODY$
 BEGIN

@@ -721,9 +721,27 @@ dump_variable(StringInfo out, PLpgSQL_variable *node)
 static void
 dump_type(StringInfo out, PLpgSQL_type *node)
 {
+	ListCell   *lc;
+
 	WRITE_NODE_TYPE("PLpgSQL_type");
 
 	WRITE_STRING_FIELD(typname, typname, typname);
+	if (node->origtypname != NULL && node->origtypname->names != NIL)
+	{
+		appendStringInfoString(out, "\"typname_identifiers\":[");
+		foreach(lc, node->origtypname->names)
+		{
+			Node *identifier = (Node *) lfirst(lc);
+
+			if (!IsA(identifier, String))
+				elog(ERROR, "unexpected node type in PL/pgSQL type name: %d",
+					 (int) nodeTag(identifier));
+			_outToken(out, strVal(identifier));
+			appendStringInfoChar(out, ',');
+		}
+		removeTrailingDelimiter(out);
+		appendStringInfoString(out, "],");
+	}
 }
 
 static void

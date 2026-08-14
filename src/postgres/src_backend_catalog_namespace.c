@@ -5,6 +5,7 @@
  * - isTempNamespace
  * - myTempNamespace
  * - get_collation_oid
+ * - NameListToQuotedString
  * - TypenameGetTypidExtended
  * - recomputeNamespacePath
  * - activeSearchPath
@@ -1100,7 +1101,23 @@ NameListToString(const List *names)
  * Same as above except that names will be double-quoted where necessary,
  * so the string could be re-parsed (eg, by textToQualifiedNameList).
  */
+char *
+NameListToQuotedString(const List *names)
+{
+	StringInfoData string;
+	ListCell   *l;
 
+	initStringInfo(&string);
+
+	foreach(l, names)
+	{
+		if (l != list_head(names))
+			appendStringInfoChar(&string, '.');
+		appendStringInfoString(&string, quote_identifier(strVal(lfirst(l))));
+	}
+
+	return string.data;
+}
 
 /*
  * isTempNamespace - is the given namespace my temporary-table namespace?

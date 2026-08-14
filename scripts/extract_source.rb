@@ -616,6 +616,7 @@ runner.deep_resolve('deconstruct_array_builtin')
 runner.deep_resolve('plpgsql_extra_errors')
 runner.deep_resolve('plpgsql_extra_warnings')
 runner.deep_resolve('TypeNameToString')
+runner.deep_resolve('NameListToQuotedString') # needed by the catalog-independent PL/pgSQL %TYPE/%ROWTYPE mocks
 runner.deep_resolve('get_base_element_type') # needed for build_datatype (dependency not detected due to mock)
 runner.deep_resolve('type_is_rowtype') # needed for build_datatype (dependency not detected due to mock)
 runner.deep_resolve('setup_parser_errposition_callback') # needed for LookupTypeNameExtended
