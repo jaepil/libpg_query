@@ -13,7 +13,12 @@ build_datatype(HeapTuple typeTup, int32 typmod,
 
 	typ = (PLpgSQL_type *) palloc(sizeof(PLpgSQL_type));
 
-	typ->typname = pstrdup(NameStr(typeStruct->typname));
+	if (origtypname != NULL
+		&& typeStruct->typnamespace != PG_CATALOG_NAMESPACE
+		&& list_length(origtypname->names) > 1)
+		typ->typname = TypeNameToString(origtypname);
+	else
+		typ->typname = pstrdup(NameStr(typeStruct->typname));
 	typ->typoid = typeStruct->oid;
 	switch (typeStruct->typtype)
 	{

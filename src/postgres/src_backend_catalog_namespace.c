@@ -33,6 +33,8 @@
  */
 #include "postgres.h"
 
+#include "pg_query_plpgsql_catalog.h"
+
 #include "access/htup_details.h"
 #include "access/parallel.h"
 #include "access/xact.h"
@@ -952,14 +954,22 @@ LookupExplicitNamespace(const char *nspname, bool missing_ok)
 		 */
 	}
 
-	// CHANGED: Only support pg_catalog and public namespace
-    if (strcmp(nspname, "pg_catalog") == 0)
-        return PG_CATALOG_NAMESPACE;
+	if (pg_query_plpgsql_catalog_available())
+	{
+		uint32_t namespace_oid;
 
-    if (strcmp(nspname, "public") == 0)
-        return PG_PUBLIC_NAMESPACE;
+		if (pg_query_plpgsql_lookup_namespace(nspname, &namespace_oid))
+			return (Oid) namespace_oid;
+	}
+	else if (strcmp(nspname, "pg_catalog") == 0)
+		return PG_CATALOG_NAMESPACE;
 
-    elog(ERROR, "Not implemented (LookupExplicitNamespace only supports pg_catalog and public)");
+	if (missing_ok)
+		return InvalidOid;
+
+	ereport(ERROR,
+			(errcode(ERRCODE_UNDEFINED_SCHEMA),
+			 errmsg("schema \"%s\" does not exist", nspname)));
 
 	/*namespaceId = get_namespace_oid(nspname, missing_ok);
 	if (missing_ok && !OidIsValid(namespaceId))
@@ -1263,7 +1273,7 @@ return DEFAULT_COLLATION_OID;}
 static void
 recomputeNamespacePath(void)
 {
-activeSearchPath = list_make2_oid(PG_CATALOG_NAMESPACE, PG_PUBLIC_NAMESPACE);}
+activeSearchPath = list_make1_oid(PG_CATALOG_NAMESPACE);}
 
 /*
  * AccessTempTableNamespace

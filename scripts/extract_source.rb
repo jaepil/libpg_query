@@ -53,6 +53,7 @@ class Runner
 
     @blocklist = []
     @mock = {}
+    @mock_includes = {}
 
     @basepath = File.absolute_path(ARGV[0]) + '/'
     @out_path = File.absolute_path(ARGV[1]) + '/'
@@ -62,8 +63,9 @@ class Runner
     @blocklist << symbol
   end
 
-  def mock(symbol, code = nil, add_definition = true)
+  def mock(symbol, code = nil, add_definition = true, includes: [])
     @mock[symbol] = code ? [code, add_definition] : ["\n" + File.read(File.join(__dir__, 'mocks', symbol + '.c')) + "\n", false]
+    @mock_includes[symbol] = includes
   end
 
   def run
@@ -399,6 +401,7 @@ class Runner
 
     @symbols_to_output.each do |filename, symbols|
       file_thread_local_variables = []
+      file_mock_includes = []
       dead_positions = (@file_to_method_and_pos[filename] || {}).dup
 
       symbols.each do |symbol|
@@ -432,6 +435,7 @@ class Runner
 
         if @mock.key?(symbol)
           mock_code, mock_add_definition = @mock[symbol]
+          file_mock_includes.concat(@mock_includes.fetch(symbol, []))
           str += "\n" + skipped_code.split('{').first + "{\n" if mock_add_definition
           if mock_code == :error_not_implemented
             str += "\tAssert(false); elog(ERROR, \"Not implemented\");\n"
@@ -457,6 +461,15 @@ class Runner
         next_start_pos = pos[1]
       end
       str += full_code[next_start_pos..-1]
+
+      unless file_mock_includes.empty?
+        file_mock_includes.uniq!
+        include_marker = "#include \"postgres.h\"\n"
+        fail "could not place mock includes in #{filename}" unless str.include?(include_marker)
+
+        str.sub!(include_marker,
+          include_marker + "\n" + file_mock_includes.join("\n") + "\n")
+      end
 
       # In some cases we also need to take care of definitions in the same file
       file_thread_local_variables.each do |variable|
@@ -542,7 +555,13 @@ runner.mock('send_message_to_server_log', :do_nothing)
 runner.mock('send_message_to_frontend', :do_nothing)
 
 # Mocks REQUIRED for PL/pgSQL parsing
-runner.mock('SearchSysCache1')
+runner.mock('SearchSysCache1', includes: [
+  '#include <catalog/pg_type.h>',
+  '#include <catalog/pg_collation_d.h>',
+  '#include <utils/fmgroids.h>',
+  '#include "pg_query_plpgsql_catalog.h"',
+  '#include "pg_query_pg_type.c"'
+])
 runner.mock('GetSysCacheOid')
 # Mocks consumed by plpgsql_compile_callback when libpg_query forges a
 # pg_proc tuple instead of pulling one from the syscache. The file-based
@@ -556,8 +575,10 @@ runner.mock('format_procedure', 'return pstrdup("plpgsql_function");')
 runner.mock('get_fn_expr_rettype', 'return InvalidOid;') # only reached in non-validator mode, which libpg_query never uses
 runner.mock('MemoryContextSetIdentifier', :do_nothing)   # only used in MemoryContextStats dumps
 runner.mock('typenameTypeMod', 'return -1;')
-runner.mock('LookupExplicitNamespace')
-runner.mock('recomputeNamespacePath', 'activeSearchPath = list_make2_oid(PG_CATALOG_NAMESPACE, PG_PUBLIC_NAMESPACE);')
+runner.mock('LookupExplicitNamespace', includes: [
+  '#include "pg_query_plpgsql_catalog.h"'
+])
+runner.mock('recomputeNamespacePath', 'activeSearchPath = list_make1_oid(PG_CATALOG_NAMESPACE);')
 runner.mock('ConditionalLockRelationOid', 'return true;')
 runner.mock('LockRelationOid', :do_nothing)
 runner.mock('UnlockRelationOid', :do_nothing)
@@ -577,9 +598,14 @@ runner.mock('contain_var_clause', 'return false;') # We need to skip this becaus
 runner.mock('transformExpr', 'return expr;') # Don't transform default expressions in parameters
 runner.mock('coerce_to_specific_type', 'return node;') # Don't handle default expression type coercion
 runner.mock('free_expr', :do_nothing) # This would free a cached plan, which does not apply to us
-runner.mock('build_datatype') # Adjusted to not call lookup_type_cache to reduce dependencies
+runner.mock('build_datatype', includes: [
+  '#include "catalog/pg_namespace_d.h"',
+  '#include "parser/parse_type.h"'
+]) # Adjusted to not call lookup_type_cache to reduce dependencies
 runner.mock('DeconstructQualifiedName') # Adjusted to not call get_database_name / check database name, avoid inval and lock handling
-runner.mock('LookupTypeNameExtended') # Adjusted to not resolve table names
+runner.mock('LookupTypeNameExtended', includes: [
+  '#include "pg_query_plpgsql_catalog.h"'
+]) # Adjusted to not resolve table names
 runner.mock('pg_detoast_datum', 'if (VARATT_IS_EXTENDED(datum))
 		elog(ERROR, "TOASTed values are not supported");
 	else

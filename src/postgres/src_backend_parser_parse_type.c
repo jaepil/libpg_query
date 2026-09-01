@@ -31,6 +31,8 @@
  */
 #include "postgres.h"
 
+#include "pg_query_plpgsql_catalog.h"
+
 #include "access/htup_details.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_type.h"
@@ -191,12 +193,28 @@ LookupTypeNameExtended(ParseState *pstate,
 		{
 			/* Look in specific schema only */
 			Oid			namespaceId;
+			PgQueryPlpgsqlTypeMetadata type_metadata;
 			ParseCallbackState pcbstate;
 
 			setup_parser_errposition_callback(&pcbstate, pstate, typeName->location);
 
 			namespaceId = LookupExplicitNamespace(schemaname, missing_ok);
-			if (OidIsValid(namespaceId))
+			if (OidIsValid(namespaceId)
+				&& pg_query_plpgsql_catalog_available())
+			{
+				if (pg_query_plpgsql_lookup_type_by_name(
+						schemaname, typname, &type_metadata))
+				{
+					if (type_metadata.namespace_oid != namespaceId)
+						elog(ERROR, "PL/pgSQL catalog returned a type in a mismatched namespace");
+					typoid = (Oid) type_metadata.oid;
+				}
+				else
+					typoid = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
+										 PointerGetDatum(typname),
+										 ObjectIdGetDatum(namespaceId));
+			}
+			else if (OidIsValid(namespaceId))
 				typoid = GetSysCacheOid2(TYPENAMENSP, Anum_pg_type_oid,
 										 PointerGetDatum(typname),
 										 ObjectIdGetDatum(namespaceId));
@@ -208,7 +226,18 @@ LookupTypeNameExtended(ParseState *pstate,
 		else
 		{
 			/* Unqualified type name, so search the search path */
-			typoid = TypenameGetTypidExtended(typname, temp_ok);
+			if (pg_query_plpgsql_catalog_available())
+			{
+				PgQueryPlpgsqlTypeMetadata type_metadata;
+
+				if (pg_query_plpgsql_lookup_type_by_name(
+						NULL, typname, &type_metadata))
+					typoid = (Oid) type_metadata.oid;
+				else
+					typoid = TypenameGetTypidExtended(typname, temp_ok);
+			}
+			else
+				typoid = TypenameGetTypidExtended(typname, temp_ok);
 		}
 
 		/* If an array reference, return the array type instead */
@@ -234,6 +263,7 @@ LookupTypeNameExtended(ParseState *pstate,
 
 	return (Type) tup;
 }
+
 
 
 /*
