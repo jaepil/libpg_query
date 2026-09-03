@@ -34,6 +34,7 @@
 #include "pg_query_plpgsql_catalog.h"
 
 #include "access/htup_details.h"
+#include "catalog/catalog.h"
 #include "catalog/namespace.h"
 #include "catalog/pg_type.h"
 #include "lib/stringinfo.h"
@@ -96,6 +97,8 @@ LookupTypeNameExtended(ParseState *pstate,
 	Oid			typoid;
 	HeapTuple	tup;
 	int32		typmod;
+	bool		catalog_available = pg_query_plpgsql_catalog_available();
+	bool		allow_unresolved_type = !catalog_available;
 
 	if (typeName->names == NIL)
 	{
@@ -198,9 +201,12 @@ LookupTypeNameExtended(ParseState *pstate,
 
 			setup_parser_errposition_callback(&pcbstate, pstate, typeName->location);
 
-			namespaceId = LookupExplicitNamespace(schemaname, missing_ok);
-			if (OidIsValid(namespaceId)
-				&& pg_query_plpgsql_catalog_available())
+			namespaceId = LookupExplicitNamespace(
+				schemaname, catalog_available ? missing_ok : true);
+			if (!catalog_available && OidIsValid(namespaceId)
+				&& IsCatalogNamespace(namespaceId))
+				allow_unresolved_type = false;
+			if (OidIsValid(namespaceId) && catalog_available)
 			{
 				if (pg_query_plpgsql_lookup_type_by_name(
 						schemaname, typname, &type_metadata))
@@ -226,7 +232,7 @@ LookupTypeNameExtended(ParseState *pstate,
 		else
 		{
 			/* Unqualified type name, so search the search path */
-			if (pg_query_plpgsql_catalog_available())
+			if (catalog_available)
 			{
 				PgQueryPlpgsqlTypeMetadata type_metadata;
 
@@ -239,6 +245,14 @@ LookupTypeNameExtended(ParseState *pstate,
 			else
 				typoid = TypenameGetTypidExtended(typname, temp_ok);
 		}
+
+		/*
+		 * The parser-only API has no user catalog to resolve custom types from.
+		 * Represent such types as anonymous records while keeping the catalog-
+		 * aware API strict about missing metadata.
+		 */
+		if (!OidIsValid(typoid) && allow_unresolved_type)
+			typoid = RECORDOID;
 
 		/* If an array reference, return the array type instead */
 		if (typeName->arrayBounds != NIL)
@@ -547,4 +561,3 @@ fail:
  * If escontext is an ErrorSaveContext node, then errors are reported by
  * filling escontext and returning false, instead of throwing them.
  */
-

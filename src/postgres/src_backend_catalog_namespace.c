@@ -5,6 +5,7 @@
  * - isTempNamespace
  * - myTempNamespace
  * - get_collation_oid
+ * - NameListToQuotedString
  * - TypenameGetTypidExtended
  * - recomputeNamespacePath
  * - activeSearchPath
@@ -960,6 +961,13 @@ LookupExplicitNamespace(const char *nspname, bool missing_ok)
 
 		if (pg_query_plpgsql_lookup_namespace(nspname, &namespace_oid))
 			return (Oid) namespace_oid;
+
+		if (missing_ok)
+			return InvalidOid;
+
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_SCHEMA),
+				 errmsg("schema \"%s\" does not exist", nspname)));
 	}
 	else if (strcmp(nspname, "pg_catalog") == 0)
 		return PG_CATALOG_NAMESPACE;
@@ -1108,7 +1116,23 @@ NameListToString(const List *names)
  * Same as above except that names will be double-quoted where necessary,
  * so the string could be re-parsed (eg, by textToQualifiedNameList).
  */
+char *
+NameListToQuotedString(const List *names)
+{
+	StringInfoData string;
+	ListCell   *l;
 
+	initStringInfo(&string);
+
+	foreach(l, names)
+	{
+		if (l != list_head(names))
+			appendStringInfoChar(&string, '.');
+		appendStringInfoString(&string, quote_identifier(strVal(lfirst(l))));
+	}
+
+	return string.data;
+}
 
 /*
  * isTempNamespace - is the given namespace my temporary-table namespace?
@@ -1386,8 +1410,6 @@ activeSearchPath = list_make1_oid(PG_CATALOG_NAMESPACE);}
  * always use an up-to-date snapshot and so might see the object as already
  * gone when it's still visible to the transaction snapshot.
  */
-
-
 
 
 

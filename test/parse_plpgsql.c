@@ -333,19 +333,6 @@ int main() {
 	int fd;
 	FILE* f_out;
 	PgQueryPlpgsqlParseResult result;
-	TestCatalogContext catalog_context = {
-		.namespace_oid = 900001,
-		.type_oid = 900002,
-		.shadow_type_oid = 900005,
-		.error = "sample catalog lookup failed"
-	};
-	const PgQueryPlpgsqlCatalog catalog = {
-		.context = &catalog_context,
-		.lookup_namespace = test_lookup_namespace,
-		.lookup_type_by_name = test_lookup_type_by_name,
-		.lookup_type_by_oid = test_lookup_type_by_oid,
-		.get_error = test_catalog_error
-	};
 
 	fd = open("test/plpgsql_samples.sql", O_RDONLY);
 	if (fd < 0) {
@@ -361,7 +348,7 @@ int main() {
 
 	if (sample_buffer != (void *) - 1)
 	{
-		result = pg_query_parse_plpgsql_with_catalog(sample_buffer, &catalog);
+		result = pg_query_parse_plpgsql(sample_buffer);
 		free(sample_buffer);
 		close(fd);
 	} else {

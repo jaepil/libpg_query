@@ -23,6 +23,13 @@ LookupExplicitNamespace(const char *nspname, bool missing_ok)
 
 		if (pg_query_plpgsql_lookup_namespace(nspname, &namespace_oid))
 			return (Oid) namespace_oid;
+
+		if (missing_ok)
+			return InvalidOid;
+
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_SCHEMA),
+				 errmsg("schema \"%s\" does not exist", nspname)));
 	}
 	else if (strcmp(nspname, "pg_catalog") == 0)
 		return PG_CATALOG_NAMESPACE;

@@ -604,7 +604,8 @@ runner.mock('build_datatype', includes: [
 ]) # Adjusted to not call lookup_type_cache to reduce dependencies
 runner.mock('DeconstructQualifiedName') # Adjusted to not call get_database_name / check database name, avoid inval and lock handling
 runner.mock('LookupTypeNameExtended', includes: [
-  '#include "pg_query_plpgsql_catalog.h"'
+  '#include "pg_query_plpgsql_catalog.h"',
+  '#include "catalog/catalog.h"'
 ]) # Adjusted to not resolve table names
 runner.mock('pg_detoast_datum', 'if (VARATT_IS_EXTENDED(datum))
 		elog(ERROR, "TOASTed values are not supported");
@@ -642,6 +643,7 @@ runner.deep_resolve('deconstruct_array_builtin')
 runner.deep_resolve('plpgsql_extra_errors')
 runner.deep_resolve('plpgsql_extra_warnings')
 runner.deep_resolve('TypeNameToString')
+runner.deep_resolve('NameListToQuotedString') # needed by the catalog-independent PL/pgSQL %TYPE/%ROWTYPE mocks
 runner.deep_resolve('get_base_element_type') # needed for build_datatype (dependency not detected due to mock)
 runner.deep_resolve('type_is_rowtype') # needed for build_datatype (dependency not detected due to mock)
 runner.deep_resolve('setup_parser_errposition_callback') # needed for LookupTypeNameExtended

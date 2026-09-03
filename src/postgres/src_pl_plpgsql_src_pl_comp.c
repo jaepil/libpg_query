@@ -1274,7 +1274,9 @@ plpgsql_parse_wordtype(char *ident)
 	PLpgSQL_type *typ;
 
 	typ = (PLpgSQL_type *) palloc0(sizeof(PLpgSQL_type));
-	typ->typname = psprintf("%s%%TYPE", ident);
+	typ->typname = psprintf("%s%%TYPE", quote_identifier(ident));
+	typ->origtypname = makeTypeName(ident);
+	typ->origtypname->pct_type = true;
 	typ->ttype = PLPGSQL_TTYPE_SCALAR;
 	return typ;
 }
@@ -1296,7 +1298,9 @@ plpgsql_parse_cwordtype(List *idents)
 	PLpgSQL_type *typ;
 
 	typ = (PLpgSQL_type *) palloc0(sizeof(PLpgSQL_type));
-	typ->typname = psprintf("%s%%TYPE", NameListToString(idents));
+	typ->typname = psprintf("%s%%TYPE", NameListToQuotedString(idents));
+	typ->origtypname = makeTypeNameFromNameList(idents);
+	typ->origtypname->pct_type = true;
 	typ->ttype = PLPGSQL_TTYPE_SCALAR;
 	return typ;
 }
@@ -1314,7 +1318,8 @@ plpgsql_parse_wordrowtype(char *ident)
 	PLpgSQL_type *typ;
 
 	typ = (PLpgSQL_type *) palloc0(sizeof(PLpgSQL_type));
-	typ->typname = psprintf("%s%%rowtype", ident);
+	typ->typname = psprintf("%s%%rowtype", quote_identifier(ident));
+	typ->origtypname = makeTypeName(ident);
 	typ->ttype = PLPGSQL_TTYPE_SCALAR;
 	return typ;
 }
@@ -1332,7 +1337,8 @@ plpgsql_parse_cwordrowtype(List *idents)
 	PLpgSQL_type *typ;
 
 	typ = (PLpgSQL_type *) palloc0(sizeof(PLpgSQL_type));
-	typ->typname = psprintf("%s%%rowtype", NameListToString(idents));
+	typ->typname = psprintf("%s%%rowtype", NameListToQuotedString(idents));
+	typ->origtypname = makeTypeNameFromNameList(idents);
 	typ->ttype = PLPGSQL_TTYPE_SCALAR;
 	return typ;
 }
