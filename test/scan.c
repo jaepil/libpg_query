@@ -34,9 +34,30 @@ int main() {
     } else {
       scan_result = pg_query__scan_result__unpack(NULL, result.pbuf.len, (void*) result.pbuf.data);
 
+      if (result.token_count != scan_result->n_tokens
+          || (result.token_count > 0 && result.tokens == NULL)) {
+        ret_code = -1;
+        printf("INVALID result for \"%s\": direct token metadata is missing\n",
+               tests[i]);
+        pg_query__scan_result__free_unpacked(scan_result, NULL);
+        pg_query_free_scan_result(result);
+        continue;
+      }
+
       for (j = 0; j < scan_result->n_tokens; j++) {
         char buffer2[1024];
         scan_token = scan_result->tokens[j];
+        if (result.tokens[j].start != scan_token->start
+            || result.tokens[j].end != scan_token->end
+            || result.tokens[j].token != scan_token->token
+            || result.tokens[j].keyword_kind != scan_token->keyword_kind) {
+          ret_code = -1;
+          printf(
+              "INVALID result for \"%s\": direct token %zu differs from "
+              "protobuf\n",
+              tests[i], j);
+          break;
+        }
         token_kind = protobuf_c_enum_descriptor_get_value(&pg_query__token__descriptor, scan_token->token);
         keyword_kind = protobuf_c_enum_descriptor_get_value(&pg_query__keyword_kind__descriptor, scan_token->keyword_kind);
         if (token_kind == NULL) {

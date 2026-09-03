@@ -28,7 +28,20 @@ typedef struct {
 } PgQueryProtobuf;
 
 typedef struct {
+  int32_t start;
+  int32_t end;
+  int32_t token;
+  // Zero for an identifier or non-keyword token; otherwise the PostgreSQL
+  // keyword category encoded by ScanToken.keyword_kind in pg_query.proto.
+  int32_t keyword_kind;
+} PgQueryScanToken;
+
+typedef struct {
   PgQueryProtobuf pbuf;
+  // Direct token metadata for callers that do not need to decode pbuf. Owned
+  // by this result and released by pg_query_free_scan_result().
+  PgQueryScanToken* tokens;
+  size_t token_count;
   char* stderr_buffer;
   PgQueryError* error;
 } PgQueryScanResult;
