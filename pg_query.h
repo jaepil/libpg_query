@@ -185,6 +185,7 @@ PgQueryParseResult pg_query_parse_opts(const char* input, int parser_options);
 PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input);
 PgQueryProtobufParseResult pg_query_parse_protobuf_opts(const char* input, int parser_options);
 PgQueryPlpgsqlParseResult pg_query_parse_plpgsql(const char* input);
+// A supplied catalog adds each PLpgSQL_type's resolved typoid to the JSON output.
 PgQueryPlpgsqlParseResult pg_query_parse_plpgsql_with_catalog(
     const char* input, const PgQueryPlpgsqlCatalog* catalog);
 

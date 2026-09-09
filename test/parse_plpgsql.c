@@ -198,6 +198,7 @@ test_catalog_aware_plpgsql_parse(void)
 		pg_query_parse_plpgsql_with_catalog(qualified_sql, &catalog);
 	bool valid = result.error == NULL && result.plpgsql_funcs != NULL
 		&& strstr(result.plpgsql_funcs, "application_types.state") != NULL
+		&& strstr(result.plpgsql_funcs, "\"typoid\":900002") != NULL
 		&& context.namespace_lookups > 0 && context.type_name_lookups > 0
 		&& context.type_oid_lookups > 0;
 
