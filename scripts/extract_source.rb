@@ -570,9 +570,9 @@ runner.mock('GetSysCacheOid')
 runner.mock('SysCacheGetAttr')
 runner.mock('SysCacheGetAttrNotNull')
 runner.mock('get_func_arg_info')
-runner.mock('cfunc_resolve_polymorphic_argtypes')
+runner.mock('cfunc_resolve_polymorphic_argtypes', includes: ['#include <catalog/pg_type.h>'])
 runner.mock('format_procedure', 'return pstrdup("plpgsql_function");')
-runner.mock('get_fn_expr_rettype', 'return InvalidOid;') # only reached in non-validator mode, which libpg_query never uses
+runner.mock('get_fn_expr_rettype', 'return InvalidOid;') # runtime compilation requires caller-specialized return types
 runner.mock('MemoryContextSetIdentifier', :do_nothing)   # only used in MemoryContextStats dumps
 runner.mock('typenameTypeMod', 'return -1;')
 runner.mock('LookupExplicitNamespace', includes: [
