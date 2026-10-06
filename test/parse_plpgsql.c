@@ -327,6 +327,52 @@ test_catalog_aware_plpgsql_parse(void)
 	return valid;
 }
 
+static bool
+test_runtime_compilation(void)
+{
+	const char *invalid_sql =
+		"CREATE FUNCTION first_use() RETURNS void LANGUAGE plpgsql AS $$ "
+		"BEGIN IF false THEN PERFORM 1+; END IF; END $$";
+	PgQueryPlpgsqlParseResult result = pg_query_parse_plpgsql(invalid_sql);
+	bool valid = result.error != NULL;
+	pg_query_free_plpgsql_parse_result(result);
+	if (!valid)
+		return false;
+
+	result = pg_query_parse_plpgsql_with_options(invalid_sql, NULL,
+		PG_QUERY_PLPGSQL_RUNTIME, NULL, NULL);
+	valid = result.error == NULL && result.plpgsql_funcs != NULL
+		&& strstr(result.plpgsql_funcs, "SELECT 1+") != NULL
+		&& strstr(result.plpgsql_funcs, "\"initvarnos\":[]") != NULL;
+	pg_query_free_plpgsql_parse_result(result);
+	if (!valid)
+		return false;
+
+	/* A runtime request must not disable validation on the next request. */
+	result = pg_query_parse_plpgsql(invalid_sql);
+	valid = result.error != NULL;
+	pg_query_free_plpgsql_parse_result(result);
+	if (!valid)
+		return false;
+
+	result = pg_query_parse_plpgsql_with_options(
+		"CREATE FUNCTION first_use() RETURNS void LANGUAGE plpgsql AS $$ "
+		"BEGIN IF THEN END IF; END $$", NULL, PG_QUERY_PLPGSQL_RUNTIME, NULL, NULL);
+	valid = result.error != NULL;
+	pg_query_free_plpgsql_parse_result(result);
+	if (!valid)
+		return false;
+
+	result = pg_query_parse_plpgsql(
+		"CREATE FUNCTION block_indices() RETURNS void LANGUAGE plpgsql AS $$ "
+		"DECLARE x int:=1; BEGIN DECLARE x text:='nested'; BEGIN NULL; END; END $$");
+	valid = result.error == NULL && result.plpgsql_funcs != NULL
+		&& strstr(result.plpgsql_funcs, "\"initvarnos\":[1]") != NULL
+		&& strstr(result.plpgsql_funcs, "\"initvarnos\":[2]") != NULL;
+	pg_query_free_plpgsql_parse_result(result);
+	return valid;
+}
+
 int main() {
 	bool ret_code = EXIT_SUCCESS;
 	char *sample_buffer;
@@ -374,6 +420,8 @@ int main() {
 	pg_query_free_plpgsql_parse_result(result);
 
 	if (!test_catalog_aware_plpgsql_parse())
+		return EXIT_FAILURE;
+	if (!test_runtime_compilation())
 		return EXIT_FAILURE;
 
 	pg_query_exit();
