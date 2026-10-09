@@ -6,6 +6,7 @@
 #include <sys/types.h>
 
 #include "postgres_deparse.h"
+#include "pg_query_scan_tokens.h"
 
 typedef struct {
 	char* message; // exception message
@@ -42,12 +43,12 @@ typedef struct {
 } PgQueryProtobuf;
 
 typedef struct {
-  int32_t start;
-  int32_t end;
-  int32_t token;
+  int32_t start; // byte offset of the token in the input
+  int32_t end; // byte offset just past the token
+  PgQueryToken token; // use pg_query_token_name to get the name as a string
   // Zero for an identifier or non-keyword token; otherwise the PostgreSQL
   // keyword category encoded by ScanToken.keyword_kind in pg_query.proto.
-  int32_t keyword_kind;
+  PgQueryKeywordKind keyword_kind;
 } PgQueryScanToken;
 
 typedef struct {
@@ -59,6 +60,12 @@ typedef struct {
   char* stderr_buffer;
   PgQueryError* error;
 } PgQueryScanResult;
+
+typedef struct {
+  PgQueryScanToken* tokens;
+  int n_tokens;
+  PgQueryError* error;
+} PgQueryScanTokensResult;
 
 typedef struct {
   char* parse_tree;
@@ -189,14 +196,47 @@ typedef enum
 // Skip validator-only checks of embedded SQL; declarations must have concrete types.
 #define PG_QUERY_PLPGSQL_RUNTIME 128
 
+// Fingerprint options (flags that control how fingerprints are calculated)
+
+#define PG_QUERY_FINGERPRINT_DEFAULT 0
+
+// RangeVar handling (bits 0-3)
+//
+// By default, relation references are fingerprinted following the Postgres 18+
+// query ID behavior (see Postgres commit 787514b30bb): in SELECT/DML statements
+// the alias name is fingerprinted, the relation name is ignored when an alias
+// is present, and schema names are ignored.
+#define PG_QUERY_FINGERPRINT_RANGEVAR_IGNORE_ALIASES (1 << 0) // Relation names are always fingerprinted, aliases are ignored
+#define PG_QUERY_FINGERPRINT_RANGEVAR_INCLUDE_SCHEMA (1 << 1) // Schema names are also fingerprinted in SELECT/DML statements (they are always fingerprinted in utility statements)
+
+// Convenience combination that matches how Postgres 17 and earlier calculate
+// query IDs, and how libpg_query 17 and earlier calculated fingerprints
+#define PG_QUERY_FINGERPRINT_RANGEVAR_PG17_COMPAT (PG_QUERY_FINGERPRINT_RANGEVAR_IGNORE_ALIASES | PG_QUERY_FINGERPRINT_RANGEVAR_INCLUDE_SCHEMA)
+
+// Relation name handling (bits 4-7)
+//
+// By default, sequences of two or more digits in relation names are ignored
+// when fingerprinting, so that queries on date/number-suffixed tables (e.g.
+// partitions like "orders_2024_01") get the same fingerprint. Set this flag
+// to fingerprint the full relation name instead.
+#define PG_QUERY_FINGERPRINT_FULL_RELNAME (1 << 4)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 PgQueryNormalizeResult pg_query_normalize(const char* input);
 PgQueryNormalizeResult pg_query_normalize_utility(const char* input);
+
+// pg_query_scan returns the tokens as a serialized ScanResult protobuf (for
+// decoding in another language), pg_query_scan_tokens returns them as a plain
+// C array (for use from C).
 PgQueryScanResult pg_query_scan(const char* input);
 PgQueryScanResult pg_query_scan_opts(const char* input, int parser_options);
+PgQueryScanTokensResult pg_query_scan_tokens(const char* input);
+const char* pg_query_token_name(PgQueryToken token);
+const char* pg_query_keyword_kind_name(PgQueryKeywordKind keyword_kind);
+
 PgQueryParseResult pg_query_parse(const char* input);
 PgQueryParseResult pg_query_parse_opts(const char* input, int parser_options);
 PgQueryProtobufParseResult pg_query_parse_protobuf(const char* input);
@@ -212,9 +252,8 @@ PgQueryPlpgsqlParseResult pg_query_parse_plpgsql_with_options(
     const char* input, const PgQueryPlpgsqlCatalog* catalog, int parser_options,
     PgQueryDiagnosticCallback callback, void* context);
 
-
 PgQueryFingerprintResult pg_query_fingerprint(const char* input);
-PgQueryFingerprintResult pg_query_fingerprint_opts(const char* input, int parser_options);
+PgQueryFingerprintResult pg_query_fingerprint_opts(const char* input, int parser_options, int fingerprint_options);
 
 // Use pg_query_split_with_scanner when you need to split statements that may
 // contain parse errors, otherwise pg_query_split_with_parser is recommended
@@ -236,6 +275,7 @@ PgQuerySummaryParseResult pg_query_summary(const char* input, int parser_options
 
 void pg_query_free_normalize_result(PgQueryNormalizeResult result);
 void pg_query_free_scan_result(PgQueryScanResult result);
+void pg_query_free_scan_tokens_result(PgQueryScanTokensResult result);
 void pg_query_free_parse_result(PgQueryParseResult result);
 void pg_query_free_split_result(PgQuerySplitResult result);
 void pg_query_free_deparse_result(PgQueryDeparseResult result);
@@ -251,8 +291,8 @@ void pg_query_exit(void);
 
 // Postgres version information
 #define PG_MAJORVERSION "18"
-#define PG_VERSION "18.4"
-#define PG_VERSION_NUM 180004
+#define PG_VERSION "18.6"
+#define PG_VERSION_NUM 180006
 
 // Deprecated APIs below
 
