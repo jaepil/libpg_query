@@ -48,15 +48,12 @@ void pg_query_free_top_memory_context(MemoryContext context)
 
 	MemoryContextDeleteChildren(context);
 
-	/* Clean up the aset.c freelist, to leave no unused context behind */
-	AllocSetDeleteFreeList();
-
 	context->methods->delete_context(context);
 
 	VALGRIND_DESTROY_MEMPOOL(context);
 
-	/* Without this, Valgrind will complain */
-	free(context);
+	/* Deleting the top context can add it to the allocator freelist. */
+	AllocSetDeleteFreeList();
 
 	/* Reset pointers */
 	TopMemoryContext = NULL;

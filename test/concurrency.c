@@ -38,6 +38,15 @@ static void test_thread_exit_key_is_reused(void) {
   pthread_key_delete(probe_key);
 }
 
+static void test_explicit_exit_reinitializes_cleanly(void) {
+  for (size_t cycle = 0; cycle < 10; cycle++) {
+    PgQueryParseResult result = pg_query_parse("SELECT 1");
+    assert(result.error == NULL);
+    pg_query_free_parse_result(result);
+    pg_query_exit();
+  }
+}
+
 int main() {
   size_t i;
   int ret;
@@ -56,6 +65,7 @@ int main() {
   }
 
   test_thread_exit_key_is_reused();
+  test_explicit_exit_reinitializes_cleanly();
 
   printf("\n");
 
