@@ -22,6 +22,7 @@
 void* test_runner(void*);
 void* parse_once(void*);
 
+#ifndef _WIN32
 static void test_thread_exit_key_is_reused(void) {
   pthread_key_t probe_key;
   void* thread_result;
@@ -40,6 +41,7 @@ static void test_thread_exit_key_is_reused(void) {
   assert(ret == 0);
   pthread_key_delete(probe_key);
 }
+#endif
 
 static void test_explicit_exit_reinitializes_cleanly(void) {
   for (size_t cycle = 0; cycle < 10; cycle++) {
@@ -94,7 +96,10 @@ int main() {
     }
   }
 
+#ifndef _WIN32
   test_thread_exit_key_is_reused();
+#endif
+  /* Windows parser keys are FLS keys, covered by windows_thread_lifetime. */
   test_explicit_exit_reinitializes_cleanly();
   test_other_thread_destructor_can_parse();
 
