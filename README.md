@@ -361,3 +361,11 @@ Portions Copyright (c) 1994, The Regents of the University of California
 All other parts are licensed under the 3-clause BSD license, see LICENSE file for details.<br>
 Copyright (c) 2015, Lukas Fittl <lukas@fittl.com>
 Copyright (c) 2016-2026, Duboce Labs, Inc. (pganalyze) <team@pganalyze.com>
+
+## Native sanitizer qualification for the PostgreSQL 18.4 maintenance pin
+
+The maintenance branch retains PostgreSQL 18.4, the existing schema and the typed public Protobuf initializer API. Tree walkers and list sorting use their declared callback types. `scripts/adapt_protobuf_callbacks.py` runs after `protoc --c_out` to emit descriptor adapters without changing initializer defaults or the Protobuf runtime; `--check` verifies the committed generated form. `scripts/verify_protobuf_callbacks.py` compares every descriptor initializer with its public typed initializer under the selected compiler instrumentation.
+
+The allocator owns cached contexts through a pthread key on POSIX systems. This keeps their lifetime independent of compiler TLS destruction order, including on macOS. Deleting the top context precedes draining the allocator cache; callers can parse again after an explicit `pg_query_exit`. The existing concurrency fixture covers thread churn and repeated explicit teardown. PostgreSQL extraction patches retain these changes when regenerating the imported files.
+
+Automatic Linux and macOS jobs compile the complete native library and run all existing tests with AddressSanitizer, UndefinedBehaviorSanitizer and leak detection, including function pointer checks. No sanitizer exception is added. Implementation PRs remain draft during correction; marking ready runs the completed batch.

@@ -131,6 +131,7 @@ $(PGDIR):
 	cd $(PGDIR); patch -p1 < $(root_dir)/patches/11_ifndef_namedatalen.patch
 	cd $(PGDIR); patch -p1 < $(root_dir)/patches/12_remove_acl_check.patch
 	cd $(PGDIR); patch -p1 < $(root_dir)/patches/13_plpgsql_catalog_context.patch
+	cd $(PGDIR); patch -p1 < $(root_dir)/patches/14_native_callback_types.patch
 	cd $(PGDIR); ./configure $(PG_CONFIGURE_FLAGS)
 	cd $(PGDIR); make -C src/pl/plpgsql/src pl_gram.h plerrcodes.h pl_reserved_kwlist_d.h pl_unreserved_kwlist_d.h
 	cd $(PGDIR); make -C src/port pg_config_paths.h
@@ -198,6 +199,7 @@ $(SOLIB): $(OBJ_FILES) Makefile
 protobuf/pg_query.pb-c.c protobuf/pg_query.pb-c.h: protobuf/pg_query.proto
 ifneq ($(shell which protoc-gen-c), )
 	protoc --c_out=. protobuf/pg_query.proto
+	python3 scripts/adapt_protobuf_callbacks.py protobuf/pg_query.pb-c.c
 else
 	@echo 'Warning: protoc-gen-c not found, skipping protocol buffer regeneration'
 endif
