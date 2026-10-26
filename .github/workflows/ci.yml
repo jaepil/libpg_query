@@ -140,8 +140,8 @@ jobs:
         os: [ubuntu-24.04, macos-15]
     env:
       CC: clang
-      CFLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
-      TEST_CFLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
+      CFLAGS: -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
+      TEST_CFLAGS: -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
       TEST_LDFLAGS: -fsanitize=address,undefined
       ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
@@ -160,6 +160,6 @@ jobs:
       - name: Verify generated descriptor callback adapters
         run: python3 scripts/adapt_protobuf_callbacks.py protobuf/pg_query.pb-c.c --check
       - name: Build and execute the complete native test suite
-        run: make -j2 test
-      - name: Exercise every Protobuf initializer callback
+        run: make -j2 CFLAGS_OPT_LEVEL=-O1 test
+      - name: Exercise every Protobuf initializer and default-message wire round trip
         run: python3 scripts/verify_protobuf_callbacks.py

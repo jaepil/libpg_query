@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise every public message initializer through its descriptor callback."""
+"""Exercise every descriptor initializer and its default-message wire round trip."""
 
 import os
 from pathlib import Path
@@ -43,6 +43,14 @@ for function, message_type in initializers:
     assert(protobuf_c_message_pack(&expected.base, expected_bytes) == expected_size);
     assert(protobuf_c_message_pack(&actual->base, actual_bytes) == actual_size);
     assert(memcmp(expected_bytes, actual_bytes, actual_size) == 0);
+    ProtobufCMessage *unpacked = protobuf_c_message_unpack(
+        &{prefix}__descriptor, NULL, expected_size, expected_bytes);
+    assert(unpacked != NULL);
+    assert(unpacked->descriptor == expected.base.descriptor);
+    assert(protobuf_c_message_get_packed_size(unpacked) == expected_size);
+    assert(protobuf_c_message_pack(unpacked, actual_bytes) == expected_size);
+    assert(memcmp(expected_bytes, actual_bytes, expected_size) == 0);
+    protobuf_c_message_free_unpacked(unpacked, NULL);
     free(expected_bytes);
     free(actual_bytes);
     free(actual);
@@ -58,4 +66,4 @@ with tempfile.TemporaryDirectory(prefix="pg-query-initializers-") as temporary:
     subprocess.run(compiler + flags + ["-I" + str(root), "-I" + str(root / "vendor"),
                    str(fixture), str(root / "libpg_query.a"), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
-print(f"All {len(initializers)} descriptor initializers match the typed public initializer defaults")
+print(f"All {len(initializers)} descriptor initializers and default-message wire round trips match the typed public initializer defaults")
