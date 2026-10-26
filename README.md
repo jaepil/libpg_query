@@ -361,3 +361,11 @@ Portions Copyright (c) 1994, The Regents of the University of California
 All other parts are licensed under the 3-clause BSD license, see LICENSE file for details.<br>
 Copyright (c) 2015, Lukas Fittl <lukas@fittl.com>
 Copyright (c) 2016-2026, Duboce Labs, Inc. (pganalyze) <team@pganalyze.com>
+
+## Native sanitizer qualification for the PostgreSQL 18.4 maintenance pin
+
+The maintenance branch retains PostgreSQL 18.4, the existing schema and the typed public Protobuf initializer API. Tree walkers and list sorting use their declared callback types. `scripts/adapt_protobuf_callbacks.py` runs after `protoc --c_out` to emit descriptor adapters without changing initializer defaults or the Protobuf runtime; `--check` verifies the committed generated form. `scripts/verify_protobuf_callbacks.py` compares every descriptor initializer with its public typed initializer under the selected compiler instrumentation.
+
+The allocator owns cached contexts through a pthread key on POSIX systems and a native FLS key on Windows. Both the cache and top context receive native thread-exit callbacks, independently of compiler TLS destruction order. Windows uses the documented [FLS cleanup callback](https://learn.microsoft.com/en-us/windows/win32/api/winnt/nc-winnt-pfls_callback_function), including MSVC builds without pthreads. Deleting the top context precedes draining the allocator cache; callers can parse again after an explicit `pg_query_exit`. The existing concurrency fixture retains all 500 thread lifetimes with at most 16 simultaneous threads. The native Windows fixture additionally checks 1,024 thread lifetimes and reentry from a later FLS destructor on every Windows compiler target. PostgreSQL extraction patches and the shared private thread header retain these changes when regenerating the imported files.
+
+Automatic Linux and macOS jobs compile the complete native library and run all existing tests with AddressSanitizer, UndefinedBehaviorSanitizer and leak detection, including function pointer checks. No sanitizer exception is added. Implementation PRs remain draft during correction; marking ready runs the completed batch.

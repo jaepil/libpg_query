@@ -1,9 +1,15 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [18-latest, fix/pg18-4-maintenance]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
 
 jobs:
   build:
+    if: github.event_name == 'push' || !github.event.pull_request.draft
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,24 +55,24 @@ jobs:
       run: |
         if [ "$PROTOBUF_LIB" = protobuf-cpp ]
         then
-          echo "::set-output name=proto_flags::USE_PROTOBUF_CPP=1"
+          echo "proto_flags=USE_PROTOBUF_CPP=1" >> "$GITHUB_OUTPUT"
         else
-          echo "::set-output name=proto_flags::"
+          echo "proto_flags=" >> "$GITHUB_OUTPUT"
         fi
         if [ "$COMPILER" = clang ]
         then
-          echo "::set-output name=compiler_flags::CC=clang CXX=clang"
+          echo "compiler_flags=CC=clang CXX=clang" >> "$GITHUB_OUTPUT"
         elif [ "$COMPILER" = gcc ]
         then
-          echo "::set-output name=compiler_flags::CC=gcc CXX=g++"
+          echo "compiler_flags=CC=gcc CXX=g++" >> "$GITHUB_OUTPUT"
         else
-          echo "::set-output name=compiler_flags::"
+          echo "compiler_flags=" >> "$GITHUB_OUTPUT"
         fi
         if [ "$VALGRIND" = valgrind ]
         then
-          echo "::set-output name=debug_flags::VALGRIND=1 DEBUG=1"
+          echo "debug_flags=VALGRIND=1 DEBUG=1" >> "$GITHUB_OUTPUT"
         else
-          echo "::set-output name=debug_flags::"
+          echo "debug_flags=" >> "$GITHUB_OUTPUT"
         fi
       env:
         PROTOBUF_LIB: ${{ matrix.protobuf_lib }}
@@ -77,6 +83,7 @@ jobs:
       env:
         FLAGS: ${{ format('{0} {1} {2}', steps.make_flags.outputs.proto_flags, steps.make_flags.outputs.compiler_flags, steps.make_flags.outputs.debug_flags) }}
   build_macos:
+    if: github.event_name == 'push' || !github.event.pull_request.draft
     runs-on: macos-latest
     steps:
     - name: Check out code
@@ -84,6 +91,7 @@ jobs:
     - name: Build and run tests
       run: make
   build_windows_msvc:
+    if: github.event_name == 'push' || !github.event.pull_request.draft
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -99,6 +107,7 @@ jobs:
     - name: Build and run tests
       run: nmake /F Makefile.msvc
   build_windows_msys2:
+    if: github.event_name == 'push' || !github.event.pull_request.draft
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -120,3 +129,37 @@ jobs:
       shell: msys2 {0}
       run: |
         make
+
+  native_sanitizers:
+    name: Native ASan UBSan LSan (${{ matrix.os }})
+    if: github.event_name == 'push' || !github.event.pull_request.draft
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    env:
+      CC: clang
+      CFLAGS: -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
+      TEST_CFLAGS: -O1 -fsanitize=address,undefined -fno-omit-frame-pointer
+      TEST_LDFLAGS: -fsanitize=address,undefined
+      ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select upstream LLVM on macOS
+        if: runner.os == 'macOS'
+        run: |
+          if ! brew list llvm >/dev/null 2>&1; then
+            brew install llvm
+          fi
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+      - name: Verify generated descriptor callback adapters
+        run: python3 scripts/adapt_protobuf_callbacks.py protobuf/pg_query.pb-c.c --check
+      - name: Build and execute the complete native test suite
+        run: make -j2 CFLAGS_OPT_LEVEL=-O1 test
+      - name: Exercise every Protobuf initializer and default-message wire round trip
+        run: python3 scripts/verify_protobuf_callbacks.py
