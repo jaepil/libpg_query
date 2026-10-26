@@ -145,7 +145,7 @@
  
  		/*
  		 * Reset the context, if it needs it, so that we aren't hanging on to
-@@ -1747,3 +1829,11 @@
+@@ -1747,3 +1829,18 @@
  
  #endif							/* MEMORY_CONTEXT_CHECKING */
  
@@ -154,8 +154,15 @@
 +AllocSetDeleteFreeList(void)
 +{
 +	AllocSetFreeList *freelists = AllocSetGetFreeLists(false);
-+	if (freelists != NULL)
-+		AllocSetFreeListClear(freelists);
++	if (freelists == NULL)
++		return;
++#ifdef HAVE_PTHREAD
++	/* Explicit parser shutdown ends the cache owner, including on main. */
++	pthread_setspecific(AllocSetFreeListKeyState()->key, NULL);
++	AllocSetFreeListDestroy(freelists);
++#else
++	AllocSetFreeListClear(freelists);
++#endif
 +}
 --- a/src/include/utils/memutils.h
 +++ b/src/include/utils/memutils.h

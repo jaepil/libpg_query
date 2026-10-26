@@ -59,6 +59,7 @@ void pg_query_free_top_memory_context(MemoryContext context)
 	TopMemoryContext = NULL;
 	CurrentMemoryContext = NULL;
 	ErrorContext = NULL;
+	pg_query_initialized = 0;
 }
 
 #ifdef HAVE_PTHREAD
@@ -80,7 +81,6 @@ void pg_query_exit(void)
 	pthread_setspecific(pg_query_thread_exit_key, NULL);
 #endif
 	pg_query_free_top_memory_context(TopMemoryContext);
-	pg_query_initialized = 0;
 }
 
 MemoryContext pg_query_enter_memory_context()

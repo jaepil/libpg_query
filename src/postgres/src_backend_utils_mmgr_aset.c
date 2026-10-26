@@ -1856,6 +1856,13 @@ void
 AllocSetDeleteFreeList(void)
 {
 	AllocSetFreeList *freelists = AllocSetGetFreeLists(false);
-	if (freelists != NULL)
-		AllocSetFreeListClear(freelists);
+	if (freelists == NULL)
+		return;
+#ifdef HAVE_PTHREAD
+	/* Explicit parser shutdown ends the cache owner, including on main. */
+	pthread_setspecific(AllocSetFreeListKeyState()->key, NULL);
+	AllocSetFreeListDestroy(freelists);
+#else
+	AllocSetFreeListClear(freelists);
+#endif
 }

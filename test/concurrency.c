@@ -16,6 +16,9 @@
 #define THREAD_COUNT 500
 #endif
 
+/* Bound live stacks on 32-bit hosts while retaining every thread lifetime. */
+#define ACTIVE_THREAD_LIMIT 16
+
 void* test_runner(void*);
 void* parse_once(void*);
 
@@ -47,25 +50,53 @@ static void test_explicit_exit_reinitializes_cleanly(void) {
   }
 }
 
+static pthread_key_t parser_user_exit_key;
+
+static void parse_from_thread_destructor(void *marker) {
+  assert(marker == &parser_user_exit_key);
+  assert(parse_once(NULL) == NULL);
+  pg_query_exit();
+}
+
+static void *parse_before_thread_destructor(void *unused) {
+  assert(unused == NULL);
+  assert(parse_once(NULL) == NULL);
+  assert(pthread_setspecific(parser_user_exit_key, &parser_user_exit_key) == 0);
+  return NULL;
+}
+
+static void test_other_thread_destructor_can_parse(void) {
+  /* Native keys already exist; this callback may run after their cleanup. */
+  assert(pthread_key_create(&parser_user_exit_key, parse_from_thread_destructor) == 0);
+  for (size_t cycle = 0; cycle < 16; cycle++) {
+    pthread_t thread;
+    assert(pthread_create(&thread, NULL, parse_before_thread_destructor, NULL) == 0);
+    assert(pthread_join(thread, NULL) == 0);
+  }
+  assert(pthread_key_delete(parser_user_exit_key) == 0);
+}
+
 int main() {
   size_t i;
   int ret;
-  pthread_t threads[THREAD_COUNT];
+  pthread_t threads[ACTIVE_THREAD_LIMIT];
 
-  for (i = 0; i < THREAD_COUNT; i += 1) {
-    ret = pthread_create(&threads[i], NULL, test_runner, NULL);
-    if (ret) {
-      perror("ERROR creating pthread");
-      return 1;
+  for (size_t batch = 0; batch < THREAD_COUNT; batch += ACTIVE_THREAD_LIMIT) {
+    size_t count = THREAD_COUNT - batch;
+    if (count > ACTIVE_THREAD_LIMIT) count = ACTIVE_THREAD_LIMIT;
+    for (i = 0; i < count; i += 1) {
+      ret = pthread_create(&threads[i], NULL, test_runner, NULL);
+      assert(ret == 0);
     }
-  }
-
-  for (i = 0; i < THREAD_COUNT; i += 1) {
-    pthread_join(threads[i], NULL);
+    for (i = 0; i < count; i += 1) {
+      ret = pthread_join(threads[i], NULL);
+      assert(ret == 0);
+    }
   }
 
   test_thread_exit_key_is_reused();
   test_explicit_exit_reinitializes_cleanly();
+  test_other_thread_destructor_can_parse();
 
   printf("\n");
 
