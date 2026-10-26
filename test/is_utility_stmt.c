@@ -20,7 +20,7 @@ is_utility_stmt(const char *msg)
 	return last_result.result;
 }
 
-void cleanup()
+void cleanup(void)
 {
 	if (!last_result.has_result)
 		return;
