@@ -5,9 +5,7 @@
 #include <utils/memutils.h>
 #include <utils/memdebug.h>
 
-#ifdef HAVE_PTHREAD
-#include <pthread.h>
-#endif
+#include "pg_query_thread.h"
 
 #include <signal.h>
 
@@ -15,11 +13,12 @@ const char* progname = "pg_query";
 
 __thread sig_atomic_t pg_query_initialized = 0;
 
-#ifdef HAVE_PTHREAD
-static pthread_key_t pg_query_thread_exit_key;
-static pthread_once_t pg_query_thread_exit_key_once = PTHREAD_ONCE_INIT;
+#ifdef PG_QUERY_HAVE_THREAD_CLEANUP
+static PgQueryThreadKey pg_query_thread_exit_key;
+static PgQueryThreadOnce pg_query_thread_exit_key_once = PG_QUERY_THREAD_ONCE_INIT;
+static int pg_query_thread_exit_key_error;
 static void pg_query_create_thread_exit_key(void);
-static void pg_query_thread_exit(void *key);
+static void PG_QUERY_THREAD_CALLBACK pg_query_thread_exit(void *key);
 #endif
 
 void pg_query_init(void)
@@ -30,9 +29,11 @@ void pg_query_init(void)
 	MemoryContextInit();
 	SetDatabaseEncoding(PG_UTF8);
 
-#ifdef HAVE_PTHREAD
-	pthread_once(&pg_query_thread_exit_key_once, pg_query_create_thread_exit_key);
-	pthread_setspecific(pg_query_thread_exit_key, TopMemoryContext);
+#ifdef PG_QUERY_HAVE_THREAD_CLEANUP
+	if (pg_query_thread_once(&pg_query_thread_exit_key_once, pg_query_create_thread_exit_key) != 0 ||
+		pg_query_thread_exit_key_error != 0 ||
+		pg_query_thread_setspecific(pg_query_thread_exit_key, TopMemoryContext) != 0)
+		elog(ERROR, "could not register parser thread cleanup");
 #endif
 }
 
@@ -62,13 +63,13 @@ void pg_query_free_top_memory_context(MemoryContext context)
 	pg_query_initialized = 0;
 }
 
-#ifdef HAVE_PTHREAD
+#ifdef PG_QUERY_HAVE_THREAD_CLEANUP
 static void pg_query_create_thread_exit_key(void)
 {
-	pthread_key_create(&pg_query_thread_exit_key, pg_query_thread_exit);
+	pg_query_thread_exit_key_error = pg_query_thread_key_create(&pg_query_thread_exit_key, pg_query_thread_exit);
 }
 
-static void pg_query_thread_exit(void *key)
+static void PG_QUERY_THREAD_CALLBACK pg_query_thread_exit(void *key)
 {
 	MemoryContext context = (MemoryContext) key;
 	pg_query_free_top_memory_context(context);
@@ -77,8 +78,8 @@ static void pg_query_thread_exit(void *key)
 
 void pg_query_exit(void)
 {
-#ifdef HAVE_PTHREAD
-	pthread_setspecific(pg_query_thread_exit_key, NULL);
+#ifdef PG_QUERY_HAVE_THREAD_CLEANUP
+	pg_query_thread_setspecific(pg_query_thread_exit_key, NULL);
 #endif
 	pg_query_free_top_memory_context(TopMemoryContext);
 }

@@ -51,7 +51,8 @@ examples/simple_plpgsql: examples/simple_plpgsql.c $(ARLIB)
 	$(CC) $(CFLAGS) -o $@ examples/simple_plpgsql.c $(ARLIB)
 
 TESTS = test/deparse test/fingerprint test/fingerprint_opts test/is_utility_stmt test/normalize test/parse test/parse_opts test/parse_protobuf test/parse_protobuf_opts test/parse_plpgsql test/scan test/split test/summary test/summary_truncate
-test: $(TESTS)
+test: $(TESTS) test/windows_thread_lifetime
+	.\test\windows_thread_lifetime
 	.\test\deparse
 	.\test\fingerprint
 	.\test\fingerprint_opts
@@ -74,6 +75,9 @@ test: $(TESTS)
 # Doesn't work since this requires pthreads
 #test/concurrency: test/concurrency.c test/parse_tests.c $(ARLIB)
 #	$(CC) $(CFLAGS) -o $@ test/concurrency.c $(ARLIB)
+
+test/windows_thread_lifetime: test/windows_thread_lifetime.c $(ARLIB)
+	$(CC) $(CFLAGS) -o $@ test/windows_thread_lifetime.c $(ARLIB)
 
 test/deparse: test/deparse.c test/deparse_tests.c $(ARLIB)
 	$(CC) $(CFLAGS) -o $@ test/deparse.c $(ARLIB)
